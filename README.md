@@ -45,3 +45,9 @@ $\rho$=2000000, and use Dijkstra's algorithm to verify the result after the test
 ```shell
 ./sssp -i INPUT_NAME -p 2000000 -w -s -v -a rho-stepping
 ```
+
+## Reference 
+X. Dong, Y. Gu, Y. Sun, and Y. Zhang. Efficient Stepping Algorithms and Implementations for Parallel Shortest Paths. In *ACM Symposium on Parallelism in Algorithms and Architectures (SPAA)*, 2021. 
+To appear. 
+
+X. Dong, Y. Gu, Y. Sun, and Y. Zhang. [Efficient Stepping Algorithms and Implementations for Parallel Shortest Paths.](https://arxiv.org/abs/2105.06145) *arXiv preprint 2105.06145*, 2021. 
