@@ -1,4 +1,10 @@
 #pragma once
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
+
 #include <cassert>
 #include <cinttypes>
 #include <fstream>
@@ -163,6 +169,44 @@ class Graph {
     assert((void*)fptr32 == buf.data() + size);
     fclose(fp);
   }
+  void read_binary_format(char const* filename) {
+    // use mmap by default
+    if (weighted == true) {
+      fprintf(stderr, "Error: Binary format does not support weighted input\n");
+      exit(EXIT_FAILURE);
+    }
+    struct stat sb;
+    int fd = open(filename, O_RDONLY);
+    if (fd == -1) {
+      fprintf(stderr, "Error: Cannot open file %s\n", filename);
+      exit(EXIT_FAILURE);
+    }
+    if (fstat(fd, &sb) == -1) {
+      fprintf(stderr, "Error: Unable to acquire file stat\n");
+      exit(EXIT_FAILURE);
+    }
+    char* data =
+        static_cast<char*>(mmap(0, sb.st_size, PROT_READ, MAP_PRIVATE, fd, 0));
+    size_t len = sb.st_size;
+    n = reinterpret_cast<uint64_t*>(data)[0];
+    m = reinterpret_cast<uint64_t*>(data)[1];
+    size_t sizes = reinterpret_cast<uint64_t*>(data)[2];
+    assert(sizes == (n + 1) * 8 + m * 4 + 3 * 8);
+    this->n = n, this->m = m;
+    offset = sequence<EdgeId>(n + 1);
+    edge = sequence<Edge>(m);
+    parallel_for(0, n + 1, [&](size_t i) {
+      offset[i] = reinterpret_cast<uint64_t*>(data + 3 * 8)[i];
+    });
+    parallel_for(0, m, [&](size_t i) {
+      edge[i].v = reinterpret_cast<uint32_t*>(data + 3 * 8 + (n + 1) * 8)[i];
+    });
+
+    if (data) {
+      const void* b = data;
+      munmap(const_cast<void*>(b), len);
+    }
+  }
   void read_graph(char const* filename) {
     size_t idx = string(filename).find_last_of('.');
     if (idx == string::npos) {
@@ -179,6 +223,8 @@ class Graph {
     } else if (subfix == "gr") {
       printf("Info: Reading galois format\n");
       read_galois_format(filename);
+    } else if (subfix == "bin") {
+      read_binary_format(filename);
     } else {
       fprintf(stderr, "Error: Unrecognized file extension\n");
       exit(EXIT_FAILURE);
