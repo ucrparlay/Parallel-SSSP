@@ -30,7 +30,7 @@ struct Information {
 
 class SSSP {
  private:
-  Graph G;
+  const Graph &G;
   Algorithm algo;
   bool sparse;
   int cur, nxt;
@@ -54,7 +54,7 @@ class SSSP {
 
  public:
   SSSP() = delete;
-  SSSP(Graph _G, Algorithm _algo, size_t _param = 1 << 21)
+  SSSP(const Graph &_G, Algorithm _algo, size_t _param = 1 << 21)
       : G(_G), algo(_algo), param(_param) {
     max_queue = 1ULL << static_cast<int>(ceil(log2(G.n)));
     doubling = ceil(log2(max_queue / MIN_QUEUE)) + 1;
