@@ -6,7 +6,8 @@ This repository includes the implmentation of $\rho$-stepping, $\Delta$\*-steppi
 ## Developing 
 
 ### Prerequisites 
-* g++ &gt;= 5.3.0 with support for Cilk Plus 
+* g++ &gt;= 7 with support for Cilk Plus and C++17 
+Our implementation is tested on g++ 7.5.0 
 
 ### Setting up 
 Clone the library with submodule 
