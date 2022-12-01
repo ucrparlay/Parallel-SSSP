@@ -57,7 +57,7 @@ class SSSP {
   SSSP(const Graph &_G, Algorithm _algo, size_t _param = 1 << 21)
       : G(_G), algo(_algo), param(_param) {
     max_queue = 1ULL << static_cast<int>(ceil(log2(G.n)));
-    doubling = ceil(log2(max_queue / MIN_QUEUE)) + 1;
+    doubling = ceil(log2(max_queue / MIN_QUEUE)) + 2;
     info = sequence<Information>(G.n);
     que[0] = que[1] = sequence<NodeId>(max_queue);
     que_num = sequence<NodeId>(max_queue);
