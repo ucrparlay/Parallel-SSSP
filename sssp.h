@@ -1,11 +1,8 @@
 #pragma once
 #include "graph.hpp"
-#include "pbbslib/get_time.h"
-#include "pbbslib/parallel.h"
-#include "pbbslib/sequence.h"
-#include "pbbslib/utilities.h"
+#include "parlay/internal/get_time.h"
 using namespace std;
-using namespace pbbs;
+using namespace parlay;
 
 char const *FILEPATH = nullptr;
 constexpr int NUM_SRC = 1000;
@@ -65,5 +62,5 @@ class SSSP {
   void sssp(int s, EdgeTy *dist);
   void reset_timer();
   void set_sd_scale(int x) { sd_scale = x; }
-  timer t_all;
+  internal::timer t_all;
 };

@@ -4,9 +4,10 @@
 #include <numeric>
 
 #include "dijkstra.hpp"
+#include "parlay/parallel.h"
 
 using namespace std;
-using namespace pbbs;
+using namespace parlay;
 
 void SSSP::degree_sampling(size_t sz) {
   static uint32_t seed = 353442899;
@@ -174,10 +175,9 @@ void SSSP::relax(size_t sz) {
             add(u);
           }
         } else {
-          sliced_for(_n, BLOCK_SIZE,
-                     [&]([[maybe_unused]] size_t j, size_t _s, size_t _e) {
-                       relax_neighbors(f, _s, _e);
-                     });
+          blocked_for(0, _n, BLOCK_SIZE, [&](size_t, size_t _s, size_t _e) {
+            relax_neighbors(f, _s, _e);
+          });
         }
       }
     });
@@ -237,10 +237,10 @@ void SSSP::relax(size_t sz) {
         if (info[u].dist <= th && (info[u].fl & in_que)) {
           info[u].fl &= ~in_que;
           size_t _n = G.offset[u + 1] - G.offset[u];
-          sliced_for(_n, BLOCK_SIZE,
-                     [&]([[maybe_unused]] size_t j, size_t _s, size_t _e) {
-                       relax_neighbors(u, _s, _e);
-                     });
+          blocked_for(0, _n, BLOCK_SIZE,
+                      [&]([[maybe_unused]] size_t j, size_t _s, size_t _e) {
+                        relax_neighbors(u, _s, _e);
+                      });
         }
       });
       subround++;
@@ -254,7 +254,7 @@ int SSSP::pack() {
   if (sparse) {
     parallel_for(0, que_size,
                  [&](size_t i) { que_num[i] = (que[nxt][i] != UINT_MAX); });
-    nxt_sz = scan_inplace(que_num.slice(0, que_size),
+    nxt_sz = scan_inplace(que_num.cut(0, que_size),
                           monoid([](NodeId a, NodeId b) { return a + b; }, 0));
     next_sparse = (nxt_sz < G.n / sd_scale);
     if (next_sparse) {
@@ -281,8 +281,9 @@ int SSSP::pack() {
   } else {  // dense
     auto que_num0 = dseq(
         G.n, [&](size_t i) -> NodeId { return (info[i].fl & in_que) ? 1 : 0; });
-    nxt_sz = scan_(que_num0, que_num.slice(),
-                   monoid([](NodeId a, NodeId b) { return a + b; }, 0));
+    nxt_sz = internal::scan_(
+        que_num0, make_slice(que_num),
+        monoid([](NodeId a, NodeId b) { return a + b; }, 0), no_flag);
     next_sparse = (nxt_sz < G.n / sd_scale);
     if (next_sparse) {
       parallel_for(0, G.n, [&](size_t i) {
@@ -414,14 +415,14 @@ int main(int argc, char *argv[]) {
     // first time warmup
     solver.reset_timer();
     solver.sssp(s, my_dist);
-    printf("warmup round (not counted): %f\n", solver.t_all.get_total());
+    printf("warmup round (not counted): %f\n", solver.t_all.total_time());
 
     for (int i = 0; i < NUM_ROUND; i++) {
       solver.reset_timer();
       solver.sssp(s, my_dist);
-      sssp_time.push_back(solver.t_all.get_total());
+      sssp_time.push_back(solver.t_all.total_time());
 
-      printf("round %d: %f\n", i + 1, solver.t_all.get_total());
+      printf("round %d: %f\n", i + 1, solver.t_all.total_time());
     }
     sort(begin(sssp_time), end(sssp_time));
     printf("median running time: %f\n", sssp_time[(sssp_time.size() - 1) / 2]);

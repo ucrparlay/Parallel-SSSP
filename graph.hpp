@@ -12,10 +12,13 @@
 #include <string>
 #include <vector>
 
-#include "pbbslib/sequence.h"
-#include "pbbslib/utilities.h"
+#include "parlay/delayed_sequence.h"
+#include "parlay/primitives.h"
+#include "parlay/sequence.h"
+#include "parlay/utilities.h"
+#include "utils.h"
 using namespace std;
-using namespace pbbs;
+using namespace parlay;
 
 using NodeId = uint32_t;
 using EdgeId = uint64_t;
@@ -75,7 +78,7 @@ class Graph {
       exit(EXIT_FAILURE);
     }
     sequence<bool> digit(size);
-    auto idx = dseq(size, [](size_t i) { return i; });
+    auto idx = delayed_seq<size_t>(size, [](size_t i) { return i; });
     auto st = filter(idx, [&](size_t i) {
       return isdigit(buf[i]) && (i == 0 || !isdigit(buf[i - 1]));
     });
@@ -84,7 +87,7 @@ class Graph {
     });
     assert(st.size() == ed.size());
     size_t num_sum = st.size();
-    auto num = dseq(num_sum, [&](size_t i) {
+    auto num = delayed_seq<size_t>(num_sum, [&](size_t i) {
       return stol(string(buf.begin() + st[i], buf.begin() + ed[i] + 1));
     });
     n = num[0], m = num[1];
@@ -263,7 +266,7 @@ class Graph {
         write_add(&inv_offset[edge[j].v], 1);
       }
     });
-    scan_inplace(inv_offset.slice(),
+    scan_inplace(make_slice(inv_offset),
                  monoid([](size_t a, size_t b) { return a + b; }, 0));
     sequence<EdgeId> tmp_offset = inv_offset;
     parallel_for(0, n, [&](size_t i) {
@@ -273,8 +276,8 @@ class Graph {
       });
     });
     parallel_for(0, n, [&](size_t i) {
-      quicksort(inv_edge.slice(inv_offset[i], inv_offset[i + 1]),
-                [](Edge a, Edge b) { return a < b; });
+      sort_inplace(inv_edge.cut(inv_offset[i], inv_offset[i + 1]),
+                   [](Edge a, Edge b) { return a < b; });
     });
     ofstream ofs(filename);
     if (!ofs.is_open()) {
@@ -332,7 +335,7 @@ class Graph {
     if (!ordered) {
       fprintf(stderr, "Warning: Graph is not ordered, reordering\n");
       parallel_for(0, n, [&](size_t i) {
-        quicksort(edge.slice(offset[i], offset[i + 1]),
+        sort_inplace(edge.cut(offset[i], offset[i + 1]),
                   [](Edge a, Edge b) { return a < b; });
       });
       check_order();

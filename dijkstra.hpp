@@ -2,6 +2,7 @@
 #include <queue>
 
 #include "graph.hpp"
+#include "parlay/internal/get_time.h"
 void dijkstra(size_t s, const Graph &G, EdgeTy *dist) {
   fill(dist, dist + G.n, INT_MAX / 2);
   dist[s] = 0;
@@ -28,10 +29,10 @@ void dijkstra(size_t s, const Graph &G, EdgeTy *dist) {
 
 void verifier(size_t s, const Graph &G, EdgeTy *ch_dist) {
   EdgeTy *cor_dist = new EdgeTy[G.n];
-  timer tm;
+  internal::timer tm;
   dijkstra(s, G, cor_dist);
   tm.stop();
-  printf("dijkstra running time: %-10f\n", tm.get_total());
+  printf("dijkstra running time: %-10f\n", tm.total_time());
   parallel_for(0, G.n, [&](size_t i) {
     if (cor_dist[i] != ch_dist[i]) {
       printf("dijkstra_dist[%zu]=%d, my_dist[%zu]=%d\n", i, cor_dist[i], i,
