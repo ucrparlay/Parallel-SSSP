@@ -26,6 +26,8 @@ using EdgeTy = uint32_t;
 constexpr int LOG2_WEIGHT = 18;
 constexpr int WEIGHT = 1 << LOG2_WEIGHT;
 
+constexpr EdgeTy DIST_MAX = numeric_limits<EdgeTy>::max() / 2;
+
 struct Edge {
   NodeId v;
   EdgeTy w;
@@ -42,7 +44,7 @@ struct Edge {
 
 class Graph {
  public:
-  uint64_t n, m;
+  size_t n, m;
   sequence<Edge> edge;
   sequence<EdgeId> offset;
   bool weighted;
@@ -336,7 +338,7 @@ class Graph {
       fprintf(stderr, "Warning: Graph is not ordered, reordering\n");
       parallel_for(0, n, [&](size_t i) {
         sort_inplace(edge.cut(offset[i], offset[i + 1]),
-                  [](Edge a, Edge b) { return a < b; });
+                     [](Edge a, Edge b) { return a < b; });
       });
       check_order();
     }
@@ -403,5 +405,37 @@ class Graph {
       printf("weight between [%10d, %10d): %u\n", 1 << (i - 1), 1 << i,
              weight[i]);
     }
+  }
+  void generate_random_graph(size_t n = 10, size_t m = 20) {
+    static int seed = 0;
+    this->n = n, this->m = m;
+    sequence<pair<NodeId, NodeId>> edgelist(m);
+    parallel_for(0, m, [&](size_t i) {
+      edgelist[i] = {hash32(i + seed) % n, hash32(i + m + seed) % n};
+    });
+    seed += 2 * m;
+    sort_inplace(make_slice(edgelist));
+    offset = sequence<EdgeId>(n + 1, numeric_limits<NodeId>::max());
+    edge = sequence<Edge>(m);
+    parallel_for(0, m, [&](size_t i) {
+      if (i == 0 || edgelist[i].first != edgelist[i - 1].first) {
+        offset[edgelist[i].first] = i;
+      }
+      edge[i].v = edgelist[i].second;
+    });
+    auto offset_seq = make_slice(offset.rbegin(), offset.rend());
+    auto M = parlay::minimum<NodeId>();
+    M.identity = m;
+    scan_inclusive_inplace(offset_seq, M);
+    // for (size_t i = 0; i < m; i++) {
+    // printf("edges[%zu]: (%u,%u)\n", i, edgelist[i].first,
+    // edgelist[i].second);
+    //}
+    // for (size_t i = 0; i < n; i++) {
+    // printf("edgeslist[%zu]: ", i);
+    // for (size_t j = offset[i]; j < offset[i + 1]; j++) {
+    // printf("%u%c", edge[j].v, " \n"[j + 1 == offset[i + 1]]);
+    //}
+    //}
   }
 };

@@ -2,7 +2,11 @@
 #include <climits>
 #include <cstring>
 #include <iostream>
+
+#include "parlay/utilities.h"
 using namespace std;
+
+constexpr size_t BLOCK_SIZE = 1024;
 
 template <typename ET>
 inline bool atomic_compare_and_swap(ET *a, ET oldval, ET newval) {
@@ -71,3 +75,26 @@ inline bool write_max(ET *a, ET b, F less) {
   return r;
 }
 
+template <class ET>
+inline ET _hash(ET a) {
+  if (sizeof(ET) == 4) {
+    return parlay::hash32(a);
+  } else if (sizeof(ET) == 8) {
+    return parlay::hash64(a);
+  } else {
+    std::cout << "hash bad length: " << sizeof(ET) << std::endl;
+    abort();
+  }
+}
+
+template <class ET>
+inline ET _hash_2(ET a) {
+  if (sizeof(ET) == 4) {
+    return parlay::hash32_2(a);
+  } else if (sizeof(ET) == 8) {
+    return parlay::hash64_2(a);
+  } else {
+    std::cout << "hash bad length: " << sizeof(ET) << std::endl;
+    abort();
+  }
+}
