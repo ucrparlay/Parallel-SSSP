@@ -6,7 +6,7 @@ using namespace std;
 using namespace parlay;
 
 char const *FILEPATH = nullptr;
-constexpr int NUM_SRC = 10001;
+constexpr int NUM_SRC = 100;
 constexpr int NUM_ROUND = 1;
 
 // constexpr int BLOCK_SIZE = 1 << 12;
@@ -36,6 +36,7 @@ class SSSP {
   void degree_sampling(size_t sz);
   void sparse_sampling(size_t sz);
   size_t dense_sampling();
+  void add_to_bag(NodeId v);
   size_t sparse_relax(size_t sz);
   size_t dense_relax();
   void sparse2dense(size_t sz);
@@ -53,4 +54,68 @@ class SSSP {
   }
   sequence<EdgeTy> sssp(int s);
   void set_sd_scale(int x) { sd_scale = x; }
+};
+
+class Rho_Stepping {
+  size_t rho;
+  size_t seed;
+
+  const bool &sparse;
+  const size_t &size;
+  const size_t &n;
+  const sequence<EdgeTy> &dist;
+  const sequence<bool> &in_frontier;
+  const sequence<NodeId> &frontier;
+
+  Rho_Stepping(size_t _rho, const bool &_sparse, const size_t &_size,
+               const size_t &_n, const sequence<EdgeTy> &_dist,
+               const sequence<bool> &_in_frontier,
+               const sequence<NodeId> &_frontier)
+      : rho(_rho),
+        sparse(_sparse),
+        size(_size),
+        n(_n),
+        dist(_dist),
+        in_frontier(_in_frontier),
+        frontier(_frontier) {}
+  void init() { seed = 0; }
+  EdgeTy get_threshold() {
+    if (size <= rho) {
+      return DIST_MAX;
+    }
+    EdgeTy sample_dist[SSSP_SAMPLES + 1];
+    for (size_t i = 0; i <= SSSP_SAMPLES; i++) {
+      if (sparse) {
+        NodeId v = frontier[hash32(seed + i) % size];
+        sample_dist[i] = dist[v];
+      } else {
+        NodeId v = hash32(seed + i) % n;
+        if (in_frontier[v]) {
+          sample_dist[i] = dist[v];
+        } else {
+          sample_dist[i] = DIST_MAX;
+        }
+      }
+    }
+    size_t id = 1.0 * rho / size * SSSP_SAMPLES;
+    return sample_dist[id];
+  }
+};
+
+class Delta_Stepping {
+  EdgeTy delta;
+  EdgeTy thres;
+
+  Delta_Stepping(EdgeTy _delta) : delta(_delta) {}
+  void init() { thres = 0; }
+  EdgeTy get_threshold() {
+    thres += delta;
+    return thres;
+  }
+};
+
+class Bellman_Ford {
+  Bellman_Ford() {}
+  void init() {}
+  EdgeTy get_threshold() { return DIST_MAX; }
 };
