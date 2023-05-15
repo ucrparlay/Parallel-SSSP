@@ -6,11 +6,9 @@ using namespace std;
 using namespace parlay;
 
 char const *FILEPATH = nullptr;
-constexpr int NUM_SRC = 100;
-constexpr int NUM_ROUND = 1;
+constexpr int NUM_SRC = 1000;
+constexpr int NUM_ROUND = 5;
 
-// constexpr int BLOCK_SIZE = 1 << 12;
-// constexpr size_t MIN_QUEUE = 1 << 14;
 constexpr size_t LOCAL_QUEUE_SIZE = 1024;
 constexpr size_t DEG_THLD = 20;
 constexpr size_t SSSP_SAMPLES = 1000;

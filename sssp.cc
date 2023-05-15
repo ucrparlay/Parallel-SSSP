@@ -165,18 +165,22 @@ size_t SSSP::dense_relax() {
   int subround = 1;
   while (true) {
     size_t est_size = dense_sampling();
-    if (est_size < G.n / sd_scale) {
+    if (est_size == 0 || est_size < G.n / sd_scale) {
       break;
     }
     EdgeTy th;
     if (algo == rho_stepping) {
-      int rate;
-      if (subround <= 2) {
-        rate = min(SSSP_SAMPLES - 1, SSSP_SAMPLES * param / est_size / 10);
+      if (est_size == 0) {
+        th = DIST_MAX;
       } else {
-        rate = min(SSSP_SAMPLES - 1, SSSP_SAMPLES * param / est_size);
+        int rate;
+        if (subround <= 2) {
+          rate = min(SSSP_SAMPLES - 1, SSSP_SAMPLES * param / est_size / 10);
+        } else {
+          rate = min(SSSP_SAMPLES - 1, SSSP_SAMPLES * param / est_size);
+        }
+        th = sample_dist[rate];
       }
-      th = sample_dist[rate];
       // printf("th: %u\n", th);
     } else if (algo == delta_stepping) {
       th = delta;
@@ -275,11 +279,11 @@ sequence<EdgeTy> SSSP::sssp(int s) {
   frontier[0] = s;
   in_frontier[s] = true;
   dist[s] = 0;
-  sparse = false;
+  sparse = true;
 
   while (size) {
-    printf("size: %zu, threshold: %zu, %s\n", size, G.n / sd_scale,
-           sparse ? "sparse" : "dense");
+    // printf("size: %zu, threshold: %zu, %s\n", size, G.n / sd_scale,
+    // sparse ? "sparse" : "dense");
     if (sparse) {
       size = sparse_relax(size);
     } else {
@@ -356,7 +360,6 @@ int main(int argc, char *argv[]) {
 
   printf("Reading graph...\n");
   G.read_graph(FILEPATH);
-  // G.generate_random_graph();
   if (!weighted) {
     printf("Generating edge weights...\n");
     G.generate_weight();
@@ -370,23 +373,30 @@ int main(int argc, char *argv[]) {
           "num_round=%d\n",
           FILEPATH, G.n, G.m, param, NUM_SRC, NUM_ROUND);
 
+  // srand(0);
   for (int v = 0; v < NUM_SRC; v++) {
+    // size_t MAXN = 1e7, MAXM = 2e8;
+    // size_t n = max((size_t)1, rand() % MAXN), m = max(n, (size_t)rand() %
+    // MAXM); printf("n: %zu, m: %zu\n", n, m); G.generate_random_graph(n, m);
+    // G.generate_weight();
+    // SSSP solver(G, algo, param);
+    // solver.set_sd_scale(max((size_t)1, G.m / G.n));
     int s = hash32(v) % G.n;
     printf("source %d: %-10d\n", v, s);
-    // double total_time = 0;
-    // for (int i = 0; i <= NUM_ROUND; i++) {
-    // internal::timer t;
-    // solver.sssp(s);
-    // t.stop();
-    // if (i == 0) {
-    // printf("Warmup Round: %f\n", t.total_time());
-    //} else {
-    // printf("Round %d: %f\n", i, t.total_time());
-    // total_time += t.total_time();
-    //}
-    //}
-    // double average_time = total_time / NUM_ROUND;
-    // printf("Average time: %f\n", average_time);
+    double total_time = 0;
+    for (int i = 0; i <= NUM_ROUND; i++) {
+      internal::timer t;
+      solver.sssp(s);
+      t.stop();
+      if (i == 0) {
+        printf("Warmup Round: %f\n", t.total_time());
+      } else {
+        printf("Round %d: %f\n", i, t.total_time());
+        total_time += t.total_time();
+      }
+    }
+    double average_time = total_time / NUM_ROUND;
+    printf("Average time: %f\n", average_time);
 
     if (verify) {
       printf("Running verifier...\n");
