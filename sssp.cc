@@ -9,295 +9,33 @@
 using namespace std;
 using namespace parlay;
 
-void SSSP::degree_sampling(size_t sz) {
-  static uint32_t seed = 353442899;
-  for (size_t i = 0; i < SSSP_SAMPLES; i++) {
-    NodeId u = frontier[hash32(seed) % sz];
-    sample_deg[i] = G.offset[u + 1] - G.offset[u];
-    seed++;
-  }
-}
-
-void SSSP::sparse_sampling(size_t sz) {
-  static uint32_t seed = 998244353;
-  for (size_t i = 0; i < SSSP_SAMPLES; i++) {
-    NodeId u = frontier[hash32(seed) % sz];
-    sample_dist[i] = dist[u];
-    seed++;
-  }
-  sort(sample_dist, sample_dist + SSSP_SAMPLES);
-}
-
-void SSSP::add_to_bag(NodeId v) {
-  // if (!in_next_frontier[v]) {
-  if (compare_and_swap(&in_next_frontier[v], false, true)) {
-    // in_next_frontier[v] = true;
-    bag.insert(v);
-  }
-}
-
-size_t SSSP::dense_sampling() {
-  static uint32_t seed = 10086;
-  int hits = 0;
-  for (size_t i = 0; i < SSSP_SAMPLES; i++) {
-    NodeId u = hash32(seed) % G.n;
-    if (in_frontier[u]) {
-      sample_dist[i] = dist[u];
-      hits++;
-    } else {
-      sample_dist[i] = DIST_MAX;
-    }
-    seed++;
-  }
-  sort(sample_dist, sample_dist + SSSP_SAMPLES);
-  return 1.0 * hits / SSSP_SAMPLES * G.n;
-}
-
-size_t SSSP::sparse_relax(size_t sz) {
-  degree_sampling(sz);
-  size_t sum_deg = 0;
-  for (size_t i = 0; i < SSSP_SAMPLES; i++) {
-    sum_deg += sample_deg[i];
-  }
-  size_t avg_deg = sum_deg / SSSP_SAMPLES;
-  bool super_sparse = (avg_deg <= DEG_THLD);
-  EdgeTy th;
-  if (algo == rho_stepping) {
-    sparse_sampling(sz);
-    int rate = min(SSSP_SAMPLES - 1, SSSP_SAMPLES * param / sz);
-    th = sample_dist[rate];
-  } else if (algo == delta_stepping) {
-    th = delta;
-    delta += param;
-  } else {
-    th = DIST_MAX;
-  }
-  parallel_for(0, sz, [&](size_t i) {
-    NodeId f = frontier[i];
-    assert(in_frontier[f] == true);
-    in_frontier[f] = false;
-    if (dist[f] > th) {
-      add_to_bag(f);
-      // bag.insert(f);
-    } else {
-      size_t _n = G.offset[f + 1] - G.offset[f];
-      if (super_sparse && _n < LOCAL_QUEUE_SIZE) {
-        NodeId local_queue[LOCAL_QUEUE_SIZE];
-        size_t front = 0, rear = 0;
-        local_queue[rear++] = f;
-        while (front < rear && rear < LOCAL_QUEUE_SIZE) {
-          NodeId u = local_queue[front++];
-          size_t deg = G.offset[u + 1] - G.offset[u];
-          if (deg >= LOCAL_QUEUE_SIZE) {
-            add_to_bag(u);
-            //  bag.insert(u);
-            continue;
-          }
-          if (dist[u] > th) {
-            add_to_bag(u);
-            // bag.insert(u);
-            continue;
-          }
-          if (G.symmetrized) {
-            EdgeTy temp_dis = dist[u];
-            for (EdgeId es = G.offset[u]; es < G.offset[u + 1]; es++) {
-              NodeId v = G.edge[es].v;
-              EdgeTy w = G.edge[es].w;
-              temp_dis = min(temp_dis, dist[v] + w);
-            }
-            write_min(&dist[u], temp_dis,
-                      [](EdgeTy w1, EdgeTy w2) { return w1 < w2; });
-          }
-          for (EdgeId es = G.offset[u]; es < G.offset[u + 1]; es++) {
-            NodeId v = G.edge[es].v;
-            EdgeTy w = G.edge[es].w;
-            if (write_min(&dist[v], dist[u] + w,
-                          [](EdgeTy w1, EdgeTy w2) { return w1 < w2; })) {
-              if (rear < LOCAL_QUEUE_SIZE) {
-                local_queue[rear++] = v;
-              } else {
-                add_to_bag(v);
-                // bag.insert(v);
-              }
-            }
-          }
-        }
-        for (size_t j = front; j < rear; j++) {
-          add_to_bag(local_queue[j]);
-          // bag.insert(local_queue[j]);
-        }
+template <class Algo>
+void run(Algo algo, const Graph G, bool verify) {
+  for (int v = 0; v < NUM_SRC; v++) {
+    NodeId s = hash32(v) % G.n;
+    printf("source %d: %-10d\n", v, s);
+    double total_time = 0;
+    for (int i = 0; i <= NUM_ROUND; i++) {
+      internal::timer t;
+      algo.sssp(s);
+      t.stop();
+      if (i == 0) {
+        printf("Warmup Round: %f\n", t.total_time());
       } else {
-        blocked_for(
-            G.offset[f], G.offset[f + 1], BLOCK_SIZE,
-            [&](size_t, size_t _s, size_t _e) {
-              if (G.symmetrized) {
-                EdgeTy temp_dist = dist[f];
-                for (EdgeId es = _s; es < _e; es++) {
-                  NodeId v = G.edge[es].v;
-                  EdgeTy w = G.edge[es].w;
-                  temp_dist = min(temp_dist, dist[v] + w);
-                }
-                if (write_min(&dist[f], temp_dist,
-                              [](EdgeTy w1, EdgeTy w2) { return w1 < w2; })) {
-                  add_to_bag(f);
-                  // bag.insert(f);
-                }
-              }
-              for (EdgeId es = _s; es < _e; es++) {
-                NodeId v = G.edge[es].v;
-                EdgeTy w = G.edge[es].w;
-                if (write_min(&dist[v], dist[f] + w,
-                              [](EdgeTy w1, EdgeTy w2) { return w1 < w2; })) {
-                  add_to_bag(v);
-                  // bag.insert(v);
-                }
-              }
-            });
+        printf("Round %d: %f\n", i, t.total_time());
+        total_time += t.total_time();
       }
     }
-  });
-  size_t size = bag.pack_into(make_slice(frontier));
-  swap(in_frontier, in_next_frontier);
-  return size;
-}
+    double average_time = total_time / NUM_ROUND;
+    printf("Average time: %f\n", average_time);
 
-size_t SSSP::dense_relax() {
-  int subround = 1;
-  while (true) {
-    size_t est_size = dense_sampling();
-    if (est_size == 0 || est_size < G.n / sd_scale) {
-      break;
+    if (verify) {
+      printf("Running verifier...\n");
+      auto dist = algo.sssp(s);
+      verifier(s, G, dist);
     }
-    EdgeTy th;
-    if (algo == rho_stepping) {
-      if (est_size == 0) {
-        th = DIST_MAX;
-      } else {
-        int rate;
-        if (subround <= 2) {
-          rate = min(SSSP_SAMPLES - 1, SSSP_SAMPLES * param / est_size / 10);
-        } else {
-          rate = min(SSSP_SAMPLES - 1, SSSP_SAMPLES * param / est_size);
-        }
-        th = sample_dist[rate];
-      }
-      // printf("th: %u\n", th);
-    } else if (algo == delta_stepping) {
-      th = delta;
-      delta += param;
-    } else {
-      th = DIST_MAX;
-    }
-    parallel_for(0, G.n, [&](size_t u) {
-      if (in_frontier[u]) {
-        in_frontier[u] = false;
-        if (dist[u] > th) {
-          in_next_frontier[u] = true;
-        } else {
-          blocked_for(
-              G.offset[u], G.offset[u + 1], BLOCK_SIZE,
-              [&](size_t, size_t _s, size_t _e) {
-                if (G.symmetrized) {
-                  EdgeTy temp_dist = dist[u];
-                  for (size_t es = _s; es < _e; es++) {
-                    NodeId v = G.edge[es].v;
-                    EdgeTy w = G.edge[es].w;
-                    temp_dist = min(temp_dist, dist[v] + w);
-                  }
-                  if (write_min(&dist[u], temp_dist,
-                                [](EdgeTy w1, EdgeTy w2) { return w1 < w2; })) {
-                    if (!in_next_frontier[u]) {
-                      in_next_frontier[u] = true;
-                    }
-                  }
-                }
-                for (size_t es = _s; es < _e; es++) {
-                  NodeId v = G.edge[es].v;
-                  EdgeTy w = G.edge[es].w;
-                  if (write_min(&dist[v], dist[u] + w,
-                                [](EdgeTy w1, EdgeTy w2) { return w1 < w2; })) {
-                    if (!in_next_frontier[v]) {
-                      in_next_frontier[v] = true;
-                    }
-                  }
-                }
-              });
-        }
-      }
-    });
-    subround++;
-    swap(in_frontier, in_next_frontier);
+    printf("\n");
   }
-  return count(in_frontier, true);
-}
-
-void SSSP::sparse2dense(size_t sz) {
-  parallel_for(0, sz, [&](size_t i) {
-    NodeId u = frontier[i];
-    assert(in_frontier[u] == true);
-    // in_frontier[u] = true;
-  });
-}
-
-void SSSP::dense2sparse() {
-  auto identity = delayed_seq<NodeId>(G.n, [&](size_t i) { return i; });
-  pack_into_uninitialized(identity, in_frontier, frontier);
-}
-
-int SSSP::pack() {
-  size_t next_size = 0;
-  bool next_sparse;
-  if (sparse) {
-    next_size = bag.pack_into(make_slice(frontier));
-    next_sparse = (next_size < G.n / sd_scale);
-    if (!next_sparse) {
-    }
-  } else {  // dense
-    next_size = count(in_frontier, true);
-    next_sparse = (next_size < G.n / sd_scale);
-    if (next_sparse) {
-    }
-  }
-  // printf("next size: %zu\n", next_size);
-  return next_size;
-}
-
-sequence<EdgeTy> SSSP::sssp(int s) {
-  if (!G.weighted) {
-    fprintf(stderr, "Error: Input graph is unweighted\n");
-    exit(EXIT_FAILURE);
-  }
-  if (algo == delta_stepping) {
-    delta = param;
-  }
-
-  parallel_for(0, G.n, [&](size_t i) {
-    dist[i] = numeric_limits<EdgeTy>::max() / 2;
-    in_frontier[i] = in_next_frontier[i] = false;
-  });
-  size_t size = 1;
-  frontier[0] = s;
-  in_frontier[s] = true;
-  dist[s] = 0;
-  sparse = true;
-
-  while (size) {
-    // printf("size: %zu, threshold: %zu, %s\n", size, G.n / sd_scale,
-    // sparse ? "sparse" : "dense");
-    if (sparse) {
-      size = sparse_relax(size);
-    } else {
-      size = dense_relax();
-    }
-    bool next_sparse = (size < G.n / sd_scale) ? true : false;
-    if (sparse && !next_sparse) {
-      sparse2dense(size);
-    } else if (!sparse && next_sparse) {
-      dense2sparse();
-    }
-    sparse = next_sparse;
-  }
-  return dist;
 }
 
 int main(int argc, char *argv[]) {
@@ -321,7 +59,8 @@ int main(int argc, char *argv[]) {
   bool symmetrized = false;
   bool verify = false;
   size_t param = 1 << 21;
-  Algorithm algo = rho_stepping;
+  int algo = rho_stepping;
+  char const *FILEPATH = nullptr;
   while ((c = getopt(argc, argv, "i:p:a:wsv")) != -1) {
     switch (c) {
       case 'i':
@@ -365,45 +104,26 @@ int main(int argc, char *argv[]) {
     G.generate_weight();
   }
 
-  SSSP solver(G, algo, param);
-  int sd_scale = G.m / G.n;
-  solver.set_sd_scale(sd_scale);
   fprintf(stdout,
           "Running on %s: |V|=%zu, |E|=%zu, param=%zu, num_src=%d, "
           "num_round=%d\n",
           FILEPATH, G.n, G.m, param, NUM_SRC, NUM_ROUND);
 
-  // srand(0);
-  for (int v = 0; v < NUM_SRC; v++) {
-    // size_t MAXN = 1e7, MAXM = 2e8;
-    // size_t n = max((size_t)1, rand() % MAXN), m = max(n, (size_t)rand() %
-    // MAXM); printf("n: %zu, m: %zu\n", n, m); G.generate_random_graph(n, m);
-    // G.generate_weight();
-    // SSSP solver(G, algo, param);
-    // solver.set_sd_scale(max((size_t)1, G.m / G.n));
-    int s = hash32(v) % G.n;
-    printf("source %d: %-10d\n", v, s);
-    double total_time = 0;
-    for (int i = 0; i <= NUM_ROUND; i++) {
-      internal::timer t;
-      solver.sssp(s);
-      t.stop();
-      if (i == 0) {
-        printf("Warmup Round: %f\n", t.total_time());
-      } else {
-        printf("Round %d: %f\n", i, t.total_time());
-        total_time += t.total_time();
-      }
-    }
-    double average_time = total_time / NUM_ROUND;
-    printf("Average time: %f\n", average_time);
-
-    if (verify) {
-      printf("Running verifier...\n");
-      auto dist = solver.sssp(s);
-      verifier(s, G, dist);
-    }
-    printf("\n");
+  if (algo == rho_stepping) {
+    Rho_Stepping solver(G, param);
+    int sd_scale = G.m / G.n;
+    solver.set_sd_scale(sd_scale);
+    run(solver, G, verify);
+  } else if (algo == delta_stepping) {
+    Delta_Stepping solver(G, param);
+    int sd_scale = G.m / G.n;
+    solver.set_sd_scale(sd_scale);
+    run(solver, G, verify);
+  } else if (algo == bellman_ford) {
+    Bellman_Ford solver(G);
+    int sd_scale = G.m / G.n;
+    solver.set_sd_scale(sd_scale);
+    run(solver, G, verify);
   }
   return 0;
 }
