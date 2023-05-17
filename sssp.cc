@@ -10,7 +10,7 @@ using namespace std;
 using namespace parlay;
 
 template <class Algo>
-void run(Algo algo, const Graph G, bool verify) {
+void run(Algo &algo, const Graph &G, bool verify) {
   for (int v = 0; v < NUM_SRC; v++) {
     NodeId s = hash32(v) % G.n;
     printf("source %d: %-10d\n", v, s);

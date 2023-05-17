@@ -17,7 +17,6 @@ enum Algorithm { rho_stepping = 0, delta_stepping, bellman_ford };
 class SSSP {
  protected:
   const Graph &G;
-  Algorithm algo;
   bool sparse;
   int sd_scale;
   size_t frontier_size;
@@ -60,9 +59,7 @@ class SSSP {
     // bool super_sparse = (avg_deg <= DEG_THLD);
     bool super_sparse = true;
 
-    printf(">>>frontier_size: %zu\n", frontier_size);
     EdgeTy th = get_threshold();
-    printf("th: %u\n", th);
 
     parallel_for(0, frontier_size, [&](size_t i) {
       NodeId f = frontier[i];
@@ -148,7 +145,6 @@ class SSSP {
         }
       }
     });
-    printf("done\n");
     swap(in_frontier, in_next_frontier);
     return bag.pack_into(make_slice(frontier));
   }
@@ -249,8 +245,6 @@ class SSSP {
     sparse = true;
 
     while (frontier_size) {
-      printf("frontier_size: %zu, threshold: %zu, %s\n", frontier_size,
-             G.n / sd_scale, sparse ? "sparse" : "dense");
       if (sparse) {
         frontier_size = sparse_relax();
       } else {
@@ -279,10 +273,6 @@ class Rho_Stepping : public SSSP {
     seed = 0;
     init = []() {};
     get_threshold = [&]() {
-      printf("frontier_size: %zu, rho: %zu\n", frontier_size, rho);
-      printf("G.n: %zu, G.m: %zu\n", G.n, G.m);
-      printf("seed: %u\n", seed);
-      frontier_size = 10;
       if (frontier_size <= rho) {
         return DIST_MAX;
       }
