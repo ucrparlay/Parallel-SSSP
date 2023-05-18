@@ -2,6 +2,7 @@
 
 #include <functional>
 #include <numeric>
+#include <fstream>
 
 #include "dijkstra.hpp"
 #include "parlay/parallel.h"
@@ -29,9 +30,16 @@ void run(Algo &algo, const Graph &G, bool verify) {
     double average_time = total_time / NUM_ROUND;
     printf("Average time: %f\n", average_time);
 
+    ofstream ofs("sssp.tsv", ios_base::app);
+    ofs << average_time << '\t';
+    ofs.close();
+
     if (verify) {
       printf("Running verifier...\n");
+      internal::timer t;
       auto dist = algo.sssp(s);
+      t.stop();
+      printf("Our running time: %f\n", t.total_time());
       verifier(s, G, dist);
     }
     printf("\n");
@@ -58,7 +66,7 @@ int main(int argc, char *argv[]) {
   bool weighted = false;
   bool symmetrized = false;
   bool verify = false;
-  size_t param = 1 << 21;
+  size_t param = ULLONG_MAX;
   int algo = rho_stepping;
   char const *FILEPATH = nullptr;
   while ((c = getopt(argc, argv, "i:p:a:wsv")) != -1) {
@@ -110,12 +118,12 @@ int main(int argc, char *argv[]) {
           FILEPATH, G.n, G.m, param, NUM_SRC, NUM_ROUND);
 
   if (algo == rho_stepping) {
-    Rho_Stepping solver(G, param);
+    Rho_Stepping solver(G);
     int sd_scale = G.m / G.n;
     solver.set_sd_scale(sd_scale);
     run(solver, G, verify);
   } else if (algo == delta_stepping) {
-    Delta_Stepping solver(G, param);
+    Delta_Stepping solver(G);
     int sd_scale = G.m / G.n;
     solver.set_sd_scale(sd_scale);
     run(solver, G, verify);

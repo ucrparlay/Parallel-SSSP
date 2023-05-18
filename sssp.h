@@ -269,7 +269,7 @@ class Rho_Stepping : public SSSP {
   uint32_t seed;
 
  public:
-  Rho_Stepping(const Graph &_G, size_t _rho) : SSSP(_G), rho(_rho) {
+  Rho_Stepping(const Graph &_G, size_t _rho = 1 << 21) : SSSP(_G), rho(_rho) {
     seed = 0;
     init = []() {};
     get_threshold = [&]() {
@@ -302,7 +302,8 @@ class Delta_Stepping : public SSSP {
   EdgeTy thres;
 
  public:
-  Delta_Stepping(const Graph &_G, EdgeTy _delta) : SSSP(_G), delta(_delta) {
+  Delta_Stepping(const Graph &_G, EdgeTy _delta = 1 << 15)
+      : SSSP(_G), delta(_delta) {
     init = [&]() { thres = 0; };
     get_threshold = [&]() {
       thres += delta;
