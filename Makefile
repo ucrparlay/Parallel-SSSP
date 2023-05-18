@@ -20,6 +20,11 @@ endif
 
 ifdef DEBUG
 CPPFLAGS += -DDEBUG -Og
+else ifdef PERF
+CC = g++
+CPPFLAGS += -Og -mcx16 -march=native -g
+else ifdef MEMCHECK
+CPPFLAGS += -Og -mcx16 -DPARLAY_SEQUENTIAL
 else
 CPPFLAGS += -O3 -mcx16 -march=native
 endif
