@@ -292,6 +292,7 @@ class Rho_Stepping : public SSSP {
       }
       seed += SSSP_SAMPLES + 1;
       size_t id = 1.0 * rho / frontier_size * SSSP_SAMPLES;
+      sort(sample_dist, sample_dist + SSSP_SAMPLES + 1);
       return sample_dist[id];
     };
   }
