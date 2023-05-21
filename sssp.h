@@ -5,7 +5,7 @@
 using namespace std;
 using namespace parlay;
 
-constexpr int NUM_SRC = 1000;
+constexpr int NUM_SRC = 10;
 constexpr int NUM_ROUND = 5;
 
 constexpr size_t LOCAL_QUEUE_SIZE = 1024;
@@ -63,7 +63,7 @@ class SSSP {
 
     parallel_for(0, frontier_size, [&](size_t i) {
       NodeId f = frontier[i];
-      assert(in_frontier[f] == true);
+      // assert(in_frontier[f] == true);
       in_frontier[f] = false;
       if (dist[f] > th) {
         add_to_bag(f);
@@ -150,7 +150,6 @@ class SSSP {
   }
 
   size_t dense_relax() {
-    int subround = 1;
     while (true) {
       size_t est_size = estimate_size();
       if (est_size == 0 || est_size < G.n / sd_scale) {
@@ -197,18 +196,17 @@ class SSSP {
           }
         }
       });
-      subround++;
       swap(in_frontier, in_next_frontier);
     }
     return count(in_frontier, true);
   }
 
   void sparse2dense() {
-    parallel_for(0, frontier_size, [&](size_t i) {
-      NodeId u = frontier[i];
-      assert(in_frontier[u] == true);
-      // in_frontier[u] = true;
-    });
+    // parallel_for(0, frontier_size, [&](size_t i) {
+    // NodeId u = frontier[i];
+    // assert(in_frontier[u] == true);
+    //  in_frontier[u] = true;
+    //});
   }
 
   void dense2sparse() {
@@ -245,6 +243,7 @@ class SSSP {
     sparse = true;
 
     while (frontier_size) {
+      internal::timer t;
       if (sparse) {
         frontier_size = sparse_relax();
       } else {
@@ -269,12 +268,14 @@ class Rho_Stepping : public SSSP {
   uint32_t seed;
 
  public:
-  Rho_Stepping(const Graph &_G, size_t _rho = 1 << 21) : SSSP(_G), rho(_rho) {
+  Rho_Stepping(const Graph &_G, size_t _rho = 1 << 20) : SSSP(_G), rho(_rho) {
     seed = 0;
     init = []() {};
     get_threshold = [&]() {
       if (frontier_size <= rho) {
-        return DIST_MAX;
+        auto _dist = delayed_seq<EdgeTy>(
+            frontier_size, [&](size_t i) { return dist[frontier[i]]; });
+        return *max_element(_dist);
       }
       EdgeTy sample_dist[SSSP_SAMPLES + 1];
       for (size_t i = 0; i <= SSSP_SAMPLES; i++) {
