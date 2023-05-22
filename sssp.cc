@@ -1,8 +1,8 @@
 #include "sssp.h"
 
+#include <fstream>
 #include <functional>
 #include <numeric>
-#include <fstream>
 
 #include "dijkstra.hpp"
 #include "parlay/parallel.h"
@@ -117,19 +117,17 @@ int main(int argc, char *argv[]) {
           "num_round=%d\n",
           FILEPATH, G.n, G.m, param, NUM_SRC, NUM_ROUND);
 
+  int sd_scale = G.m / G.n;
   if (algo == rho_stepping) {
     Rho_Stepping solver(G);
-    int sd_scale = G.m / G.n;
     solver.set_sd_scale(sd_scale);
     run(solver, G, verify);
   } else if (algo == delta_stepping) {
     Delta_Stepping solver(G);
-    int sd_scale = G.m / G.n;
     solver.set_sd_scale(sd_scale);
     run(solver, G, verify);
   } else if (algo == bellman_ford) {
     Bellman_Ford solver(G);
-    int sd_scale = G.m / G.n;
     solver.set_sd_scale(sd_scale);
     run(solver, G, verify);
   }

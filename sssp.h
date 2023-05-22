@@ -27,9 +27,8 @@ class SSSP {
   sequence<bool> in_next_frontier;
 
   void add_to_bag(NodeId v) {
-    // if (!in_next_frontier[v]) {
-    if (compare_and_swap(&in_next_frontier[v], false, true)) {
-      // in_next_frontier[v] = true;
+    if (!in_frontier[v] &&
+        compare_and_swap(&in_next_frontier[v], false, true)) {
       bag.insert(v);
     }
   }
@@ -44,7 +43,7 @@ class SSSP {
       }
       seed++;
     }
-    return 1.0 * hits / SSSP_SAMPLES * G.n;
+    return hits * G.n / SSSP_SAMPLES;
   }
 
   size_t sparse_relax() {
@@ -63,11 +62,9 @@ class SSSP {
 
     parallel_for(0, frontier_size, [&](size_t i) {
       NodeId f = frontier[i];
-      // assert(in_frontier[f] == true);
       in_frontier[f] = false;
       if (dist[f] > th) {
         add_to_bag(f);
-        // bag.insert(f);
       } else {
         size_t _n = G.offset[f + 1] - G.offset[f];
         if (super_sparse && _n < LOCAL_QUEUE_SIZE) {
@@ -77,14 +74,8 @@ class SSSP {
           while (front < rear && rear < LOCAL_QUEUE_SIZE) {
             NodeId u = local_queue[front++];
             size_t deg = G.offset[u + 1] - G.offset[u];
-            if (deg >= LOCAL_QUEUE_SIZE) {
+            if (deg >= LOCAL_QUEUE_SIZE || dist[u] > th) {
               add_to_bag(u);
-              //  bag.insert(u);
-              continue;
-            }
-            if (dist[u] > th) {
-              add_to_bag(u);
-              // bag.insert(u);
               continue;
             }
             if (G.symmetrized) {
@@ -106,16 +97,25 @@ class SSSP {
                   local_queue[rear++] = v;
                 } else {
                   add_to_bag(v);
-                  // bag.insert(v);
                 }
               }
             }
           }
           for (size_t j = front; j < rear; j++) {
             add_to_bag(local_queue[j]);
-            // bag.insert(local_queue[j]);
           }
         } else {
+          // if (G.symmetrized) {
+          // size_t deg = G.offset[f + 1] - G.offset[f];
+          // auto _dist = delayed_seq<EdgeTy>(deg, [&](size_t es) {
+          // NodeId v = G.edge[G.offset[f] + es].v;
+          // EdgeTy w = G.edge[G.offset[f] + es].w;
+          // return dist[v] + w;
+          //});
+          // EdgeTy temp_dist = *min_element(_dist);
+          // write_min(&dist[f], temp_dist,
+          //[](EdgeTy w1, EdgeTy w2) { return w1 < w2; });
+          //}
           blocked_for(
               G.offset[f], G.offset[f + 1], BLOCK_SIZE,
               [&](size_t, size_t _s, size_t _e) {
@@ -129,7 +129,6 @@ class SSSP {
                   if (write_min(&dist[f], temp_dist,
                                 [](EdgeTy w1, EdgeTy w2) { return w1 < w2; })) {
                     add_to_bag(f);
-                    // bag.insert(f);
                   }
                 }
                 for (EdgeId es = _s; es < _e; es++) {
@@ -138,7 +137,6 @@ class SSSP {
                   if (write_min(&dist[v], dist[f] + w,
                                 [](EdgeTy w1, EdgeTy w2) { return w1 < w2; })) {
                     add_to_bag(v);
-                    // bag.insert(v);
                   }
                 }
               });
@@ -150,11 +148,7 @@ class SSSP {
   }
 
   size_t dense_relax() {
-    while (true) {
-      size_t est_size = estimate_size();
-      if (est_size == 0 || est_size < G.n / sd_scale) {
-        break;
-      }
+    while (estimate_size() >= G.n / sd_scale) {
       EdgeTy th = get_threshold();
       parallel_for(0, G.n, [&](NodeId u) {
         if (in_frontier[u]) {
@@ -162,6 +156,17 @@ class SSSP {
           if (dist[u] > th) {
             in_next_frontier[u] = true;
           } else {
+            // if (G.symmetrized) {
+            // size_t deg = G.offset[u + 1] - G.offset[u];
+            // auto _dist = delayed_seq<EdgeTy>(deg, [&](size_t es) {
+            // NodeId v = G.edge[G.offset[u] + es].v;
+            // EdgeTy w = G.edge[G.offset[u] + es].w;
+            // return dist[v] + w;
+            //});
+            // EdgeTy temp_dist = *min_element(_dist);
+            // write_min(&dist[u], temp_dist,
+            //[](EdgeTy w1, EdgeTy w2) { return w1 < w2; });
+            //}
             blocked_for(G.offset[u], G.offset[u + 1], BLOCK_SIZE,
                         [&](size_t, size_t _s, size_t _e) {
                           if (G.symmetrized) {
@@ -187,7 +192,7 @@ class SSSP {
                                           [](EdgeTy w1, EdgeTy w2) {
                                             return w1 < w2;
                                           })) {
-                              if (!in_next_frontier[v]) {
+                              if (!in_frontier[v] && !in_next_frontier[v]) {
                                 in_next_frontier[v] = true;
                               }
                             }
@@ -243,7 +248,6 @@ class SSSP {
     sparse = true;
 
     while (frontier_size) {
-      internal::timer t;
       if (sparse) {
         frontier_size = sparse_relax();
       } else {
@@ -273,9 +277,13 @@ class Rho_Stepping : public SSSP {
     init = []() {};
     get_threshold = [&]() {
       if (frontier_size <= rho) {
-        auto _dist = delayed_seq<EdgeTy>(
-            frontier_size, [&](size_t i) { return dist[frontier[i]]; });
-        return *max_element(_dist);
+        if (sparse) {
+          auto _dist = delayed_seq<EdgeTy>(
+              frontier_size, [&](size_t i) { return dist[frontier[i]]; });
+          return *max_element(_dist);
+        } else {
+          return DIST_MAX;
+        }
       }
       EdgeTy sample_dist[SSSP_SAMPLES + 1];
       for (size_t i = 0; i <= SSSP_SAMPLES; i++) {
