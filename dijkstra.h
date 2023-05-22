@@ -1,7 +1,7 @@
 #pragma once
 #include <queue>
 
-#include "graph.hpp"
+#include "graph.h"
 #include "parlay/internal/get_time.h"
 
 sequence<EdgeTy> dijkstra(size_t s, const Graph &G) {

@@ -1,5 +1,5 @@
 #pragma once
-#include "graph.hpp"
+#include "graph.h"
 #include "hashbag.h"
 #include "parlay/internal/get_time.h"
 using namespace std;
@@ -8,7 +8,7 @@ using namespace parlay;
 constexpr int NUM_SRC = 10;
 constexpr int NUM_ROUND = 5;
 
-constexpr size_t LOCAL_QUEUE_SIZE = 1024;
+constexpr size_t LOCAL_QUEUE_SIZE = 4096;
 constexpr size_t DEG_THLD = 20;
 constexpr size_t SSSP_SAMPLES = 1000;
 
@@ -247,18 +247,23 @@ class SSSP {
     in_frontier[s] = true;
     sparse = true;
 
+    // int round = 0;
     while (frontier_size) {
+      // printf("Round %d: %s, size: %zu, ", round++, sparse ? "sparse" :
+      // "dense", frontier_size); internal::timer t;
       if (sparse) {
         frontier_size = sparse_relax();
       } else {
         frontier_size = dense_relax();
       }
+      // printf("relax: %f, ", t.next_time());
       bool next_sparse = (frontier_size < G.n / sd_scale) ? true : false;
       if (sparse && !next_sparse) {
         sparse2dense();
       } else if (!sparse && next_sparse) {
         dense2sparse();
       }
+      // printf("pack: %f\n", t.next_time());
       sparse = next_sparse;
     }
     return dist;

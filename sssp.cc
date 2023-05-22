@@ -4,8 +4,7 @@
 #include <functional>
 #include <numeric>
 
-#include "dijkstra.hpp"
-#include "parlay/parallel.h"
+#include "dijkstra.h"
 
 using namespace std;
 using namespace parlay;
