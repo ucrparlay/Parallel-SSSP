@@ -33,6 +33,12 @@ inline bool atomic_compare_and_swap(ET *a, ET oldval, ET newval) {
 }
 
 template <class ET>
+inline bool compare_and_swap(std::atomic<ET> *a, ET oldval, ET newval) {
+  return a->load() == oldval &&
+         atomic_compare_exchange_weak(a, &oldval, newval);
+}
+
+template <class ET>
 inline bool compare_and_swap(ET *a, ET oldval, ET newval) {
   return (*a) == oldval && atomic_compare_and_swap(a, oldval, newval);
 }

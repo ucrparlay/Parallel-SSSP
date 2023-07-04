@@ -9,6 +9,7 @@ CPPFLAGS = -std=c++17 -Wall -Wextra -Werror
 INCLUDE_PATH = -Iparlaylib/include/
 
 ifdef CILKPLUS
+CC = clang++
 CPPFLAGS += -DPARLAY_CILKPLUS -DCILK -fcilkplus
 else ifdef OPENCILK
 CPPFLAGS += -DPARLAY_OPENCILK -DCILK -fopencilk

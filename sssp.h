@@ -23,8 +23,8 @@ class SSSP {
   hashbag<NodeId> bag;
   sequence<EdgeTy> dist;
   sequence<NodeId> frontier;
-  sequence<bool> in_frontier;
-  sequence<bool> in_next_frontier;
+  sequence<atomic<bool>> in_frontier;
+  sequence<atomic<bool>> in_next_frontier;
 
   void add_to_frontier(NodeId v) {
     if (sparse) {
@@ -229,8 +229,8 @@ class SSSP {
   SSSP(const Graph &_G) : G(_G), bag(G.n) {
     dist = sequence<EdgeTy>::uninitialized(G.n);
     frontier = sequence<NodeId>::uninitialized(G.n);
-    in_frontier = sequence<bool>::uninitialized(G.n);
-    in_next_frontier = sequence<bool>::uninitialized(G.n);
+    in_frontier = sequence<atomic<bool>>::uninitialized(G.n);
+    in_next_frontier = sequence<atomic<bool>>::uninitialized(G.n);
   }
   sequence<EdgeTy> sssp(NodeId s) {
     if (!G.weighted) {
