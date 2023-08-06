@@ -12,16 +12,21 @@
 #include <string>
 #include <vector>
 
-#include "pbbslib/sequence.h"
-#include "pbbslib/utilities.h"
+#include "parlay/delayed_sequence.h"
+#include "parlay/primitives.h"
+#include "parlay/sequence.h"
+#include "parlay/utilities.h"
+#include "utils.h"
 using namespace std;
-using namespace pbbs;
+using namespace parlay;
 
 using NodeId = uint32_t;
 using EdgeId = uint64_t;
 using EdgeTy = uint32_t;
 constexpr int LOG2_WEIGHT = 18;
 constexpr int WEIGHT = 1 << LOG2_WEIGHT;
+
+constexpr EdgeTy DIST_MAX = numeric_limits<EdgeTy>::max() / 2;
 
 struct Edge {
   NodeId v;
@@ -39,7 +44,7 @@ struct Edge {
 
 class Graph {
  public:
-  uint64_t n, m;
+  size_t n, m;
   sequence<Edge> edge;
   sequence<EdgeId> offset;
   bool weighted;
@@ -75,7 +80,7 @@ class Graph {
       exit(EXIT_FAILURE);
     }
     sequence<bool> digit(size);
-    auto idx = dseq(size, [](size_t i) { return i; });
+    auto idx = delayed_seq<size_t>(size, [](size_t i) { return i; });
     auto st = filter(idx, [&](size_t i) {
       return isdigit(buf[i]) && (i == 0 || !isdigit(buf[i - 1]));
     });
@@ -84,7 +89,7 @@ class Graph {
     });
     assert(st.size() == ed.size());
     size_t num_sum = st.size();
-    auto num = dseq(num_sum, [&](size_t i) {
+    auto num = delayed_seq<size_t>(num_sum, [&](size_t i) {
       return stol(string(buf.begin() + st[i], buf.begin() + ed[i] + 1));
     });
     n = num[0], m = num[1];
@@ -232,26 +237,26 @@ class Graph {
   }
   void write_pbbs_format(char const* filename) {
     printf("Info: Writing pbbs format\n");
-    FILE* fp = fopen(filename, "w");
+    ofstream ofs(filename);
     if (weighted) {
-      fprintf(fp, "WeightedAdjacencyGraph\n");
+      ofs << "WeightedAdjacencyGraph\n";
     } else {
-      fprintf(fp, "AdjacencyGraph\n");
+      ofs << "AdjacencyGraph\n";
     }
-    fprintf(fp, "%zu\n", n);
-    fprintf(fp, "%zu\n", m);
+    ofs << n << '\n';
+    ofs << m << '\n';
     for (size_t i = 0; i < n; i++) {
-      fprintf(fp, "%" PRIu64 "\n", offset[i]);
+      ofs << offset[i] << '\n';
     }
     for (size_t i = 0; i < m; i++) {
-      fprintf(fp, "%" PRIu32 "\n", edge[i].v);
+      ofs << edge[i].v << '\n';
     }
     if (weighted) {
       for (size_t i = 0; i < m; i++) {
-        fprintf(fp, "%" PRIu32 "\n", edge[i].w);
+        ofs << edge[i].w << '\n';
       }
     }
-    fclose(fp);
+    ofs.close();
   }
   void write_gapbs_format(char const* filename) {
     printf("Info: Writing gapbs format\n");
@@ -263,7 +268,7 @@ class Graph {
         write_add(&inv_offset[edge[j].v], 1);
       }
     });
-    scan_inplace(inv_offset.slice(),
+    scan_inplace(make_slice(inv_offset),
                  monoid([](size_t a, size_t b) { return a + b; }, 0));
     sequence<EdgeId> tmp_offset = inv_offset;
     parallel_for(0, n, [&](size_t i) {
@@ -273,8 +278,8 @@ class Graph {
       });
     });
     parallel_for(0, n, [&](size_t i) {
-      quicksort(inv_edge.slice(inv_offset[i], inv_offset[i + 1]),
-                [](Edge a, Edge b) { return a < b; });
+      sort_inplace(inv_edge.cut(inv_offset[i], inv_offset[i + 1]),
+                   [](Edge a, Edge b) { return a < b; });
     });
     ofstream ofs(filename);
     if (!ofs.is_open()) {
@@ -332,8 +337,8 @@ class Graph {
     if (!ordered) {
       fprintf(stderr, "Warning: Graph is not ordered, reordering\n");
       parallel_for(0, n, [&](size_t i) {
-        quicksort(edge.slice(offset[i], offset[i + 1]),
-                  [](Edge a, Edge b) { return a < b; });
+        sort_inplace(edge.cut(offset[i], offset[i + 1]),
+                     [](Edge a, Edge b) { return a < b; });
       });
       check_order();
     }
@@ -395,10 +400,42 @@ class Graph {
       write_add(&weight[v], 1);
     });
     printf("Weight distribution:\n");
-    printf("weight between [%10d, %10d]: %u\n", 0, 0, weight[0]);
+    cout << "Weights are 0: " << weight[0] << '\n';
     for (int i = 1; i < LOG2_MAX; i++) {
-      printf("weight between [%10d, %10d): %u\n", 1 << (i - 1), 1 << i,
-             weight[i]);
+      cout << "Weights are between [" << (1 << (i - 1)) << ", " << (1 << i)
+           << "): " << weight[i] << '\n';
     }
+  }
+  void generate_random_graph(size_t n = 10, size_t m = 20) {
+    static int seed = 0;
+    this->n = n, this->m = m;
+    sequence<pair<NodeId, NodeId>> edgelist(m);
+    parallel_for(0, m, [&](size_t i) {
+      edgelist[i] = {hash32(i + seed) % n, hash32(i + m + seed) % n};
+    });
+    seed += 2 * m;
+    sort_inplace(make_slice(edgelist));
+    offset = sequence<EdgeId>(n + 1, numeric_limits<NodeId>::max());
+    edge = sequence<Edge>(m);
+    parallel_for(0, m, [&](size_t i) {
+      if (i == 0 || edgelist[i].first != edgelist[i - 1].first) {
+        offset[edgelist[i].first] = i;
+      }
+      edge[i].v = edgelist[i].second;
+    });
+    auto offset_seq = make_slice(offset.rbegin(), offset.rend());
+    auto M = parlay::minimum<NodeId>();
+    M.identity = m;
+    scan_inclusive_inplace(offset_seq, M);
+    // for (size_t i = 0; i < m; i++) {
+    // printf("edges[%zu]: (%u,%u)\n", i, edgelist[i].first,
+    // edgelist[i].second);
+    //}
+    // for (size_t i = 0; i < n; i++) {
+    // printf("edgeslist[%zu]: ", i);
+    // for (size_t j = offset[i]; j < offset[i + 1]; j++) {
+    // printf("%u%c", edge[j].v, " \n"[j + 1 == offset[i + 1]]);
+    //}
+    //}
   }
 };

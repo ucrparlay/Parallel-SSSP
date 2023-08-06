@@ -1,9 +1,11 @@
 #pragma once
 #include <queue>
 
-#include "graph.hpp"
-void dijkstra(size_t s, const Graph &G, EdgeTy *dist) {
-  fill(dist, dist + G.n, INT_MAX / 2);
+#include "graph.h"
+#include "parlay/internal/get_time.h"
+
+sequence<EdgeTy> dijkstra(size_t s, const Graph &G) {
+  sequence<EdgeTy> dist(G.n, DIST_MAX);
   dist[s] = 0;
   priority_queue<pair<EdgeTy, NodeId>, vector<pair<EdgeTy, NodeId>>,
                  greater<pair<EdgeTy, NodeId>>>
@@ -24,20 +26,19 @@ void dijkstra(size_t s, const Graph &G, EdgeTy *dist) {
       }
     }
   }
+  return dist;
 }
 
-void verifier(size_t s, const Graph &G, EdgeTy *ch_dist) {
-  EdgeTy *cor_dist = new EdgeTy[G.n];
-  timer tm;
-  dijkstra(s, G, cor_dist);
+void verifier(size_t s, const Graph &G, const sequence<EdgeTy> &act_dist) {
+  internal::timer tm;
+  auto exp_dist = dijkstra(s, G);
   tm.stop();
-  printf("dijkstra running time: %-10f\n", tm.get_total());
+  printf("dijkstra running time: %-10f\n", tm.total_time());
   parallel_for(0, G.n, [&](size_t i) {
-    if (cor_dist[i] != ch_dist[i]) {
-      printf("dijkstra_dist[%zu]=%d, my_dist[%zu]=%d\n", i, cor_dist[i], i,
-             ch_dist[i]);
+    if (exp_dist[i] != act_dist[i]) {
+      cout << "exp_dist[" << i << "]: " << exp_dist[i] << ", act_dist[" << i
+           << "]: " << act_dist[i] << '\n';
     }
-    assert(cor_dist[i] == ch_dist[i]);
+    assert(exp_dist[i] == act_dist[i]);
   });
-  delete[] cor_dist;
 }
