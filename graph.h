@@ -237,26 +237,26 @@ class Graph {
   }
   void write_pbbs_format(char const* filename) {
     printf("Info: Writing pbbs format\n");
-    FILE* fp = fopen(filename, "w");
+    ofstream ofs(filename);
     if (weighted) {
-      fprintf(fp, "WeightedAdjacencyGraph\n");
+      ofs << "WeightedAdjacencyGraph\n";
     } else {
-      fprintf(fp, "AdjacencyGraph\n");
+      ofs << "AdjacencyGraph\n";
     }
-    fprintf(fp, "%zu\n", n);
-    fprintf(fp, "%zu\n", m);
+    ofs << n << '\n';
+    ofs << m << '\n';
     for (size_t i = 0; i < n; i++) {
-      fprintf(fp, "%" PRIu64 "\n", offset[i]);
+      ofs << offset[i] << '\n';
     }
     for (size_t i = 0; i < m; i++) {
-      fprintf(fp, "%" PRIu32 "\n", edge[i].v);
+      ofs << edge[i].v << '\n';
     }
     if (weighted) {
       for (size_t i = 0; i < m; i++) {
-        fprintf(fp, "%" PRIu32 "\n", edge[i].w);
+        ofs << edge[i].w << '\n';
       }
     }
-    fclose(fp);
+    ofs.close();
   }
   void write_gapbs_format(char const* filename) {
     printf("Info: Writing gapbs format\n");
@@ -400,10 +400,10 @@ class Graph {
       write_add(&weight[v], 1);
     });
     printf("Weight distribution:\n");
-    printf("weight between [%10d, %10d]: %u\n", 0, 0, weight[0]);
+    cout << "Weights are 0: " << weight[0] << '\n';
     for (int i = 1; i < LOG2_MAX; i++) {
-      printf("weight between [%10d, %10d): %u\n", 1 << (i - 1), 1 << i,
-             weight[i]);
+      cout << "Weights are between [" << (1 << (i - 1)) << ", " << (1 << i)
+           << "): " << weight[i] << '\n';
     }
   }
   void generate_random_graph(size_t n = 10, size_t m = 20) {
