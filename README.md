@@ -55,7 +55,17 @@ The application can auto-detect the format of the input graph based on the suffi
 Some unweighted binary graphs can be found in our [Google Drive](https://drive.google.com/drive/u/3/folders/1ZuhfaLmdL-EyOiWYqZGD1rOy_oSFRWe4). For storage limit, we don't provide the large graphs used in our paper. They can be found in [Stanford Network Analysis Project](http://snap.stanford.edu/) and [Web Data Commons](http://webdatacommons.org/hyperlinkgraph/). 
 
 ## Reference 
-Xiaojun Dong, Yan Gu, Yihan Sun, and Yunming Zhang. [*Efficient Stepping Algorithms and Implementations for Parallel Shortest Paths*](https://dl.acm.org/doi/10.1145/3409964.3461782). In ACM Symposium on Parallelism in Algorithms and Architectures (SPAA), 2021. 
+Xiaojun Dong, Yan Gu, Yihan Sun, and Yunming Zhang. [Efficient Stepping Algorithms and Implementations for Parallel Shortest Paths](https://dl.acm.org/doi/10.1145/3409964.3461782). In *Proceedings of the 33rd ACM Symposium on Parallelism in Algorithms and Architectures*, pp. 184-197, 2021.  
 
+Xiaojun Dong, Yan Gu, Yihan Sun, and Yunming Zhang. [Efficient Stepping Algorithms and Implementations for Parallel Shortest Paths](https://arxiv.org/abs/2105.06145). *arXiv preprint 2105.06145*, 2021.  
 
-Xiaojun Dong, Yan Gu, Yihan Sun, and Yunming Zhang. [*Efficient Stepping Algorithms and Implementations for Parallel Shortest Paths*](https://arxiv.org/abs/2105.06145). arXiv preprint 2105.06145 [cs.DS], 2021. 
+If you use our code, please cite our paper:
+```
+@inproceedings{dong2021efficient,
+  title     = {Efficient stepping algorithms and implementations for parallel shortest paths},
+  author    = {Dong, Xiaojun and Gu, Yan and Sun, Yihan and Zhang, Yunming},
+  booktitle = {Proceedings of the 33rd ACM Symposium on Parallelism in Algorithms and Architectures},
+  pages     = {184--197},
+  year      = {2021}
+}
+```
