@@ -65,7 +65,7 @@ int main(int argc, char *argv[]) {
   bool weighted = false;
   bool symmetrized = false;
   bool verify = false;
-  size_t param = ULLONG_MAX;
+  string param;
   int algo = rho_stepping;
   char const *FILEPATH = nullptr;
   while ((c = getopt(argc, argv, "i:p:a:wsv")) != -1) {
@@ -74,7 +74,7 @@ int main(int argc, char *argv[]) {
         FILEPATH = optarg;
         break;
       case 'p':
-        param = atol(optarg);
+        param = string(optarg);
         break;
       case 'a':
         if (!strcmp(optarg, "rho-stepping")) {
@@ -112,17 +112,29 @@ int main(int argc, char *argv[]) {
   }
 
   fprintf(stdout,
-          "Running on %s: |V|=%zu, |E|=%zu, param=%zu, num_src=%d, "
+          "Running on %s: |V|=%zu, |E|=%zu, param=%s, num_src=%d, "
           "num_round=%d\n",
-          FILEPATH, G.n, G.m, param, NUM_SRC, NUM_ROUND);
+          FILEPATH, G.n, G.m, param.c_str(), NUM_SRC, NUM_ROUND);
 
   int sd_scale = G.m / G.n;
   if (algo == rho_stepping) {
-    Rho_Stepping solver(G);
+    size_t rho = 1 << 20;
+    if (param != "") {
+      rho = stoull(param);
+    }
+    Rho_Stepping solver(G, rho);
     solver.set_sd_scale(sd_scale);
     run(solver, G, verify);
   } else if (algo == delta_stepping) {
-    Delta_Stepping solver(G);
+    EdgeTy delta = 1 << 15;
+    if (param != "") {
+      if constexpr (is_integral_v<EdgeTy>) {
+        delta = stoull(param);
+      } else {
+        delta = stod(param);
+      }
+    }
+    Delta_Stepping solver(G, delta);
     solver.set_sd_scale(sd_scale);
     run(solver, G, verify);
   } else if (algo == bellman_ford) {
