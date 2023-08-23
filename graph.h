@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "parlay/delayed_sequence.h"
+#include "parlay/io.h"
 #include "parlay/primitives.h"
 #include "parlay/sequence.h"
 #include "parlay/utilities.h"
@@ -66,47 +67,41 @@ class Graph {
     });
   }
   void read_pbbs_format(char const* filename) {
-    FILE* fp = fopen(filename, "r");
-    if (fp == nullptr) {
-      fprintf(stderr, "Error: file %s does not exist\n", filename);
-      exit(EXIT_FAILURE);
-    }
-    fseek(fp, 0, SEEK_END);
-    size_t size = ftell(fp);
-    rewind(fp);
-    sequence<char> buf(size);
-    if (fread(buf.begin(), 1, size, fp) != size) {
-      fprintf(stderr, "Error: Read failed\n");
-      exit(EXIT_FAILURE);
-    }
-    sequence<bool> digit(size);
-    auto idx = delayed_seq<size_t>(size, [](size_t i) { return i; });
-    auto st = filter(idx, [&](size_t i) {
-      return isdigit(buf[i]) && (i == 0 || !isdigit(buf[i - 1]));
-    });
-    auto ed = filter(idx, [&](size_t i) {
-      return isdigit(buf[i]) && (i == size - 1 || !isdigit(buf[i + 1]));
-    });
-    assert(st.size() == ed.size());
-    size_t num_sum = st.size();
-    auto num = delayed_seq<size_t>(num_sum, [&](size_t i) {
-      return stol(string(buf.begin() + st[i], buf.begin() + ed[i] + 1));
-    });
-    n = num[0], m = num[1];
+    auto chars = chars_from_file(string(filename));
+    auto tokens_seq = tokens(chars);
+    auto header = tokens_seq[0];
+
+    n = chars_to_ulong_long(tokens_seq[1]);
+    m = chars_to_ulong_long(tokens_seq[2]);
     if (weighted) {
-      assert(num.size() == n + m + m + 2);
+      assert(header == to_chars("WeightedAdjacencyGraph"));
+      assert(tokens_seq.size() == n + 2 * m + 3);
     } else {
-      assert(num.size() == n + m + 2);
+      assert(header == to_chars("AdjacencyGraph"));
+      assert(tokens_seq.size() == n + m + 3);
     }
+
     offset = sequence<EdgeId>(n + 1);
     edge = sequence<Edge>(m);
-    parallel_for(0, n, [&](size_t i) { offset[i] = num[i + 2]; });
+    parallel_for(0, n, [&](size_t i) {
+      offset[i] =
+          internal::chars_to_int_t<NodeId>(make_slice(tokens_seq[i + 3]));
+    });
     offset[n] = m;
-    parallel_for(0, m, [&](size_t i) { edge[i].v = num[i + n + 2]; });
+    parallel_for(0, m, [&](size_t i) {
+      edge[i].v =
+          internal::chars_to_int_t<NodeId>(make_slice(tokens_seq[i + n + 3]));
+    });
     if (weighted) {
-      parallel_for(0, m, [&](size_t i) { edge[i].w = num[i + n + m + 2]; });
+      parallel_for(0, m, [&](size_t i) {
+        if constexpr (is_integral_v<EdgeTy>) {
+          edge[i].w = internal::chars_to_int_t<NodeId>(
+              make_slice(tokens_seq[i + n + m + 3]));
+        } else {
+          edge[i].w = chars_to_double(tokens_seq[i + n + m + 3]);
+        }
+      });
     }
-    fclose(fp);
   }
   void read_gapbs_format(char const* filename) {
     ifstream ifs(filename);
@@ -328,7 +323,7 @@ class Graph {
     parallel_for(0, n, [&](size_t i) {
       parallel_for(offset[i], offset[i + 1], [&](size_t j) {
         if (j + 1 < offset[i + 1]) {
-          if (edge[j].v >= edge[j + 1].v) {
+          if (edge[j].v > edge[j + 1].v) {
             ordered = false;
           }
         }
