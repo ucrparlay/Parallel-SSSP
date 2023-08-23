@@ -36,8 +36,10 @@ void verifier(size_t s, const Graph &G, const sequence<EdgeTy> &act_dist) {
   printf("dijkstra running time: %-10f\n", tm.total_time());
   parallel_for(0, G.n, [&](size_t i) {
     if (exp_dist[i] != act_dist[i]) {
-      cout << "exp_dist[" << i << "]: " << exp_dist[i] << ", act_dist[" << i
-           << "]: " << act_dist[i] << '\n';
+      string out =
+          "exp_dist[" + to_string(i) + "]: " + to_string(exp_dist[i]) + " vs. ";
+      out += "act_dist[" + to_string(i) + "]: " + to_string(act_dist[i]) + "\n";
+      cout << out;
     }
     assert(exp_dist[i] == act_dist[i]);
   });
