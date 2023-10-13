@@ -321,7 +321,7 @@ class Delta_Stepping : public SSSP {
  public:
   Delta_Stepping(const Graph &_G, EdgeTy _delta = 1 << 15)
       : SSSP(_G), delta(_delta) {}
-  void init() { thres = 0; }
+  void init() override { thres = 0; }
   EdgeTy get_threshold() override {
     thres += delta;
     return thres;

@@ -191,7 +191,6 @@ class Graph {
     m = reinterpret_cast<uint64_t*>(data)[1];
     size_t sizes = reinterpret_cast<uint64_t*>(data)[2];
     assert(sizes == (n + 1) * 8 + m * 4 + 3 * 8);
-    this->n = n, this->m = m;
     offset = sequence<EdgeId>::uninitialized(n + 1);
     edge = sequence<Edge>::uninitialized(m);
     parallel_for(0, n + 1, [&](size_t i) {
