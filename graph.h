@@ -192,8 +192,8 @@ class Graph {
     size_t sizes = reinterpret_cast<uint64_t*>(data)[2];
     assert(sizes == (n + 1) * 8 + m * 4 + 3 * 8);
     this->n = n, this->m = m;
-    offset = sequence<EdgeId>(n + 1);
-    edge = sequence<Edge>(m);
+    offset = sequence<EdgeId>::uninitialized(n + 1);
+    edge = sequence<Edge>::uninitialized(m);
     parallel_for(0, n + 1, [&](size_t i) {
       offset[i] = reinterpret_cast<uint64_t*>(data + 3 * 8)[i];
     });
@@ -237,6 +237,7 @@ class Graph {
     } else {
       ofs << "AdjacencyGraph\n";
     }
+    ofs << fixed << setprecision(10);
     ofs << n << '\n';
     ofs << m << '\n';
     for (size_t i = 0; i < n; i++) {
