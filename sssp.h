@@ -221,8 +221,8 @@ class SSSP {
     pack_into_uninitialized(identity, in_frontier, frontier);
   }
 
-  function<void()> init;
-  function<EdgeTy()> get_threshold;
+  virtual void init() = 0;
+  virtual EdgeTy get_threshold() = 0;
 
  public:
   SSSP() = delete;
@@ -281,36 +281,36 @@ class Rho_Stepping : public SSSP {
  public:
   Rho_Stepping(const Graph &_G, size_t _rho = 1 << 20) : SSSP(_G), rho(_rho) {
     seed = 0;
-    init = []() {};
-    get_threshold = [&]() {
-      if (frontier_size <= rho) {
-        if (sparse) {
-          auto _dist = delayed_seq<EdgeTy>(
-              frontier_size, [&](size_t i) { return dist[frontier[i]]; });
-          return *max_element(_dist);
-        } else {
-          return DIST_MAX;
-        }
+  }
+  void init() override {}
+  EdgeTy get_threshold() override {
+    if (frontier_size <= rho) {
+      if (sparse) {
+        auto _dist = delayed_seq<EdgeTy>(
+            frontier_size, [&](size_t i) { return dist[frontier[i]]; });
+        return *max_element(_dist);
+      } else {
+        return DIST_MAX;
       }
-      EdgeTy sample_dist[SSSP_SAMPLES + 1];
-      for (size_t i = 0; i <= SSSP_SAMPLES; i++) {
-        if (sparse) {
-          NodeId v = frontier[hash32(seed + i) % frontier_size];
+    }
+    EdgeTy sample_dist[SSSP_SAMPLES + 1];
+    for (size_t i = 0; i <= SSSP_SAMPLES; i++) {
+      if (sparse) {
+        NodeId v = frontier[hash32(seed + i) % frontier_size];
+        sample_dist[i] = dist[v];
+      } else {
+        NodeId v = hash32(seed + i) % G.n;
+        if (in_frontier[v]) {
           sample_dist[i] = dist[v];
         } else {
-          NodeId v = hash32(seed + i) % G.n;
-          if (in_frontier[v]) {
-            sample_dist[i] = dist[v];
-          } else {
-            sample_dist[i] = DIST_MAX;
-          }
+          sample_dist[i] = DIST_MAX;
         }
       }
-      seed += SSSP_SAMPLES + 1;
-      size_t id = 1.0 * rho / frontier_size * SSSP_SAMPLES;
-      sort(sample_dist, sample_dist + SSSP_SAMPLES + 1);
-      return sample_dist[id];
-    };
+    }
+    seed += SSSP_SAMPLES + 1;
+    size_t id = 1.0 * rho / frontier_size * SSSP_SAMPLES;
+    sort(sample_dist, sample_dist + SSSP_SAMPLES + 1);
+    return sample_dist[id];
   }
 };
 
@@ -320,19 +320,17 @@ class Delta_Stepping : public SSSP {
 
  public:
   Delta_Stepping(const Graph &_G, EdgeTy _delta = 1 << 15)
-      : SSSP(_G), delta(_delta) {
-    init = [&]() { thres = 0; };
-    get_threshold = [&]() {
-      thres += delta;
-      return thres;
-    };
+      : SSSP(_G), delta(_delta) {}
+  void init() override { thres = 0; }
+  EdgeTy get_threshold() override {
+    thres += delta;
+    return thres;
   }
 };
 
 class Bellman_Ford : public SSSP {
  public:
-  Bellman_Ford(const Graph &_G) : SSSP(_G) {
-    init = []() {};
-    get_threshold = []() { return DIST_MAX; };
-  }
+  Bellman_Ford(const Graph &_G) : SSSP(_G) {}
+  void init() override {}
+  EdgeTy get_threshold() override { return DIST_MAX; }
 };

@@ -51,7 +51,6 @@ class Graph {
   bool weighted;
   bool symmetrized;
 
-  Graph() = delete;
   Graph(bool _weighted = false, bool _symmetrized = false)
       : weighted(_weighted), symmetrized(_symmetrized) {}
   void generate_weight() {
@@ -192,9 +191,8 @@ class Graph {
     m = reinterpret_cast<uint64_t*>(data)[1];
     size_t sizes = reinterpret_cast<uint64_t*>(data)[2];
     assert(sizes == (n + 1) * 8 + m * 4 + 3 * 8);
-    this->n = n, this->m = m;
-    offset = sequence<EdgeId>(n + 1);
-    edge = sequence<Edge>(m);
+    offset = sequence<EdgeId>::uninitialized(n + 1);
+    edge = sequence<Edge>::uninitialized(m);
     parallel_for(0, n + 1, [&](size_t i) {
       offset[i] = reinterpret_cast<uint64_t*>(data + 3 * 8)[i];
     });
@@ -238,6 +236,7 @@ class Graph {
     } else {
       ofs << "AdjacencyGraph\n";
     }
+    ofs << fixed << setprecision(10);
     ofs << n << '\n';
     ofs << m << '\n';
     for (size_t i = 0; i < n; i++) {
@@ -328,6 +327,52 @@ class Graph {
       fwrite(&edge[i].w, sizeof(EdgeTy), 1, fp);
     }
     fclose(fp);
+  }
+
+  // This function symmetrizes a weighted directed graph and removes self-loops
+  // and duplicate edges.
+  Graph symmetrize_weighted_graph() {
+    assert(weighted == true && symmetrized == false);
+    sequence<tuple<NodeId, NodeId, EdgeTy>> edgelist(m * 2);
+    parallel_for(0, n, [&](size_t i) {
+      parallel_for(
+          offset[i], offset[i + 1],
+          [&](size_t j) {
+            edgelist[j * 2] = {i, edge[j].v, edge[j].w};
+            edgelist[j * 2 + 1] = {edge[j].v, i, edge[j].w};
+          },
+          BLOCK_SIZE);
+    });
+
+    sort_inplace(make_slice(edgelist));
+    auto unique_id = delayed_seq<bool>(edgelist.size(), [&](size_t i) {
+      return (i == 0 || edgelist[i] != edgelist[i - 1]) &&
+             (get<0>(edgelist[i]) != get<1>(edgelist[i]));
+    });
+    auto unique_edges = pack(edgelist, unique_id);
+
+    m = unique_edges.size();
+    printf("m: %zu\n", m);
+    Graph G;
+    G.n = n;
+    G.m = m;
+    G.weighted = true;
+    G.symmetrized = true;
+    G.offset = sequence<EdgeId>(n);
+    G.edge = sequence<Edge>(m);
+    parallel_for(0, m, [&](size_t i) {
+      auto [u, v, w] = unique_edges[i];
+      G.edge[i] = {v, w};
+      if (i == 0 || get<0>(unique_edges[i - 1]) != u) {
+        G.offset[u] = i;
+      }
+      if (i == m - 1 || get<0>(unique_edges[i + 1]) != u) {
+        size_t end = (i == m - 1 ? n : get<0>(unique_edges[i + 1]));
+        parallel_for(
+            u + 1, end, [&](size_t j) { G.offset[j] = i + 1; }, BLOCK_SIZE);
+      }
+    });
+    return G;
   }
   void check_order() {
     bool ordered = true;

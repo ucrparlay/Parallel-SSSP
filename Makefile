@@ -39,6 +39,9 @@ all: sssp
 sssp:	sssp.cc sssp.h dijkstra.h graph.h utils.h
 	$(CC) $(CPPFLAGS) $(INCLUDE_PATH) sssp.cc -o sssp
 
+symmetrize:	symmetrize.cc graph.h
+	$(CC) $(CPPFLAGS) $(INCLUDE_PATH) symmetrize.cc -o symmetrize
+
 clean:
-	rm sssp
+	rm sssp symmetrize
 
