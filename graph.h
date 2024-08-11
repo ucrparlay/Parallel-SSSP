@@ -255,27 +255,6 @@ class Graph {
   }
   void write_gapbs_format(char const* filename) {
     printf("Info: Writing gapbs format\n");
-    sequence<EdgeId> inv_offset(n + 1);
-    sequence<Edge> inv_edge(m);
-    parallel_for(0, n + 1, [&](size_t i) { inv_offset[i] = 0; });
-    parallel_for(0, n, [&](size_t i) {
-      for (size_t j = offset[i]; j < offset[i + 1]; j++) {
-        write_add(&inv_offset[edge[j].v], 1);
-      }
-    });
-    scan_inplace(make_slice(inv_offset),
-                 monoid([](size_t a, size_t b) { return a + b; }, 0));
-    sequence<EdgeId> tmp_offset = inv_offset;
-    parallel_for(0, n, [&](size_t i) {
-      parallel_for(offset[i], offset[i + 1], [&](size_t j) {
-        size_t pos = fetch_and_add(&tmp_offset[edge[j].v], 1);
-        inv_edge[pos] = Edge(i, edge[j].w);
-      });
-    });
-    parallel_for(0, n, [&](size_t i) {
-      sort_inplace(inv_edge.cut(inv_offset[i], inv_offset[i + 1]),
-                   [](Edge a, Edge b) { return a < b; });
-    });
     ofstream ofs(filename);
     if (!ofs.is_open()) {
       fprintf(stderr, "Error: Open %s failed\n", filename);
@@ -287,11 +266,43 @@ class Graph {
     ofs.write(reinterpret_cast<char*>(&n), sizeof(size_t));
     ofs.write(reinterpret_cast<char*>(offset.begin()),
               (n + 1) * sizeof(EdgeId));
-    ofs.write(reinterpret_cast<char*>(edge.begin()), m * sizeof(Edge));
+    if (weighted) {
+      ofs.write(reinterpret_cast<char*>(edge.begin()), m * sizeof(Edge));
+    } else {
+      sequence<NodeId> tmp_edge(m);
+      parallel_for(0, m, [&](size_t i) { tmp_edge[i] = edge[i].v; });
+      ofs.write(reinterpret_cast<char*>(tmp_edge.begin()), m * sizeof(NodeId));
+    }
     if (directed) {
+      sequence<EdgeId> inv_offset(n + 1);
+      sequence<Edge> inv_edge(m);
+      parallel_for(0, n, [&](size_t i) {
+        for (size_t j = offset[i]; j < offset[i + 1]; j++) {
+          write_add(&inv_offset[edge[j].v], 1);
+        }
+      });
+      scan_inplace(make_slice(inv_offset));
+      sequence<EdgeId> tmp_offset = inv_offset;
+      parallel_for(0, n, [&](size_t i) {
+        parallel_for(offset[i], offset[i + 1], [&](size_t j) {
+          size_t pos = fetch_and_add(&tmp_offset[edge[j].v], 1);
+          inv_edge[pos] = Edge(i, edge[j].w);
+        });
+      });
+      parallel_for(0, n, [&](size_t i) {
+        sort_inplace(inv_edge.cut(inv_offset[i], inv_offset[i + 1]),
+                     [](Edge a, Edge b) { return a < b; });
+      });
       ofs.write(reinterpret_cast<char*>(inv_offset.begin()),
                 (n + 1) * sizeof(EdgeId));
-      ofs.write(reinterpret_cast<char*>(inv_edge.begin()), m * sizeof(Edge));
+      if (weighted) {
+        ofs.write(reinterpret_cast<char*>(inv_edge.begin()), m * sizeof(Edge));
+      } else {
+        sequence<NodeId> tmp_edge(m);
+        parallel_for(0, m, [&](size_t i) { tmp_edge[i] = inv_edge[i].v; });
+        ofs.write(reinterpret_cast<char*>(tmp_edge.begin()),
+                  m * sizeof(NodeId));
+      }
     }
     ofs.close();
   }
